@@ -1,0 +1,559 @@
+📗 MANUAL TÉCNICO COMPLETO — CATÁLOGO COLECTIVO v6
+Índice general
+
+Introducción
+
+Arquitectura completa: cómo funcionan las 7 herramientas juntas
+
+Manual de uso herramienta por herramienta
+
+3.1 colectivo_v6_mini.py
+
+3.2 colectivo_v6_monitor.py
+
+3.3 run_test_v5.sh
+
+3.4 convertir_xml_a_mrc.py
+
+3.5 analizador_clusters_v2.py
+
+3.6 dashboard_ulra.py
+
+3.7 analizar.py
+
+Flujo de trabajo recomendado (pipeline completo)
+
+Interpretación de resultados
+
+Diagnóstico, rendimiento y RAM
+
+Errores frecuentes y soluciones
+
+Ejemplos prácticos listos para copiar
+
+Próximos pasos (fuentes, ampliaciones, clustering avanzado, IA)
+
+🔰 1. INTRODUCCIÓN
+
+Tu sistema de catálogo colectivo es una solución completa y modular para:
+
+fusionar catálogos MARC de múltiples instituciones,
+
+detectar duplicados internos y externos,
+
+aplicar clustering fuerte + fuzzy muy optimizado,
+
+analizar calidad de la fusión,
+
+mostrar resultados visuales en dashboards HTML avanzados,
+
+diagnosticar rendimiento y consumo de RAM.
+
+Este manual describe en profundidad cómo utilizarlo, cómo funcionan sus algoritmos, y cómo integrar todas las herramientas.
+
+🏗️ 2. ARQUITECTURA COMPLETA DEL SISTEMA
+
+Las herramientas que has subido se organizan así:
+
+Capa 1 — Procesamiento y creación del colectivo
+⚙️ colectivo_v6_mini.py (motor principal)
+
+colectivo_v6_mini
+
+Hace todo el trabajo complejo:
+
+leer MARC por streaming
+
+normalizar autor/título/año
+
+detectar claves fuertes (ISBN/ISSN)
+
+generar clave fuzzy con RapidFuzz
+
+agrupar registros en clusters
+
+seleccionar registro primario
+
+fusionar campos MARC
+
+generar XML, CSV, JSON
+
+Capa 2 — Diagnóstico y análisis interno
+🔍 colectivo_v6_monitor.py
+
+colectivo_v6_monitor
+
+
+Igual que v6_mini, pero añadiendo:
+
+tiempos de fase
+
+memoria antes/después
+
+picos de RAM
+
+histogramas
+
+fuzzy: bucket sizes, comparación real vs. prefiltro
+
+log humano estructurado
+
+Capa 3 — Automatización del pipeline
+🖥️ run_test_v5.sh
+
+run_test_v5
+
+
+Ejecuta automáticamente 12 modos distintos.
+
+Capa 4 — Conversión y preparación de fuentes
+🔄 convertir_xml_a_mrc.py
+
+convertir_xml_a_mrc
+
+
+Convierte MARCXML → MRC para maximizar el rendimiento.
+
+Capa 5 — Análisis profundo de clusters
+🧪 analizador_clusters_v2.py
+
+analizador_clusters_v2
+
+
+Analiza un cluster concreto y genera:
+
+HTML profesional
+
+CSV
+
+XML
+
+análisis campo a campo
+
+tabla de bibliotecas implicadas
+
+detección de conflictos
+
+Capa 6 — Dashboard global HTML
+📊 dashboard_ulra.py
+
+dashboard_ulra
+
+
+Genera:
+
+dashboard_index.html
+
+dashboard_<fase>.html
+
+Con datos como:
+
+% clusters multi-biblioteca
+
+% clusters >10, >25, >50
+
+niveles de riesgo
+
+heatmap entre bibliotecas
+
+duplicados internos
+
+interbibliotecas
+
+Capa 7 — Análisis general rápido
+🧰 analizar.py
+
+Conjunto de utilidades para inspeccionar registros, JSON, filtros, etc.
+
+🧭 3. MANUAL HERRAMIENTA POR HERRAMIENTA
+3.1 colectivo_v6_mini.py — MANUAL COMPLETO
+
+colectivo_v6_mini
+
+¿Qué es?
+
+El script principal que genera el catálogo colectivo desde MARC binario.
+
+Cómo funciona internamente
+
+Lee los .mrc por streaming → RAM mínima
+
+Para cada registro:
+
+extrae local_id
+
+obtiene:
+
+autor
+
+título
+
+año
+
+ISBN/ISSN
+
+construye:
+
+strong_key (si existe ISBN/ISSN válido)
+
+fuzzy_key (autor+título+año normalizados)
+
+Los registros se agrupan:
+
+primero por strong_key
+
+después por fuzzy_key
+
+finalmente por similitud RapidFuzz
+
+Para cada cluster:
+
+se selecciona un registro primario
+
+se añaden campos:
+
+prov_tag (por defecto 977)
+
+hold_tag (por defecto 978)
+
+Se exportan:
+
+XML → catálogo colectivo
+
+CSV → resumen
+
+JSON → detalle completo para análisis
+
+Parámetros principales
+--src LIBX=fichero.mrc       # Bibliotecas y sus ficheros
+--no-fuzzy                   # Solo clustering fuerte
+--strong-only                # Exclusivo ISBN/ISSN
+--weak-threshold XX          # Nivel de similitud fuzzy
+--prefer-fields              # Prefiere campos 245/260/264
+--alt-tags                   # Usa etiquetas alternativas
+--keep9xx                    # Conserva 9xx
+--final-pipeline             # Pipeline recomendado
+--out                        # XML final
+--report                     # CSV resumen
+--clusters-json              # JSON completo
+
+Ejemplo de ejecución
+python3 colectivo_v6_mini.py \
+  --src LIB1=agn.mrc \
+  --src LIB2=bnphu.mrc \
+  --src LIB3=unphu.mrc \
+  --src LIB4=intec.mrc \
+  --out tests_output/03_fuzzy_standard.xml \
+  --report tests_output/03_fuzzy_standard.csv \
+  --clusters-json tests_output/03_fuzzy_standard.json \
+  --weak-threshold 85
+
+3.2 colectivo_v6_monitor.py — MANUAL COMPLETO
+
+colectivo_v6_monitor
+
+Concepto
+
+Es el mismo script que v6_mini, pero SE MONITORIZA TODO:
+
+tiempo por fase
+
+RAM antes/después
+
+delta de memoria
+
+fuzzy: comparaciones reales vs. descartes
+
+histogramas de clusters
+
+tracemalloc: líneas que más memoria consumen
+
+Archivos generados (carpeta logs/)
+
+performance.log
+
+memory_peaks.log
+
+fuzzy_stats.log
+
+cluster_histogram.log
+
+structures_sizes.log
+
+summary_readable.log ✔ resumen legible
+
+Uso
+
+Exactamente igual que colectivo_v6_mini.py
+
+3.3 run_test_v5.sh — MANUAL COMPLETO
+
+run_test_v5
+
+Función
+
+Ejecuta automáticamente 12 modos del pipeline.
+
+Menú
+
+Incluye:
+
+ejecutar 01, 02, ..., 12
+
+modo manual
+
+A → ejecutar todas las fases
+
+Resultado
+
+Genera automáticamente:
+
+tests_output/
+  01_strong_only.*
+  02_fuzzy_safe.*
+  03_fuzzy_standard.*
+  ...
+  12_fuzzy_marc_99.*
+
+
+Cada fase incluye:
+
+XML
+
+CSV
+
+JSON
+
+3.4 convertir_xml_a_mrc.py — MANUAL COMPLETO
+
+convertir_xml_a_mrc
+
+Uso
+python3 convertir_xml_a_mrc.py archivo1.xml archivo2.xml
+
+
+Requiere yaz:
+
+sudo apt install yaz
+
+
+Convierte any.xml → any.mrc sin consumir RAM.
+
+3.5 analizador_clusters_v2.py — MANUAL COMPLETO
+
+analizador_clusters_v2
+
+Propósito
+
+Analizar un cluster concreto con máxima profundidad.
+
+Genera
+
+HTML con tabla comparativa
+
+XML del cluster
+
+CSV con valores por registro
+
+análisis por campo
+
+detecta campos:
+
+homogéneos
+
+mixtos
+
+conflictivos
+
+Comando ejemplo
+python3 analizador_clusters_v2.py \
+  --cluster 345 \
+  --phase 03_fuzzy_standard \
+  --fields 245 100 260 264 300 490 650 \
+  --out-prefix analisis_345
+
+3.6 dashboard_ulra.py — MANUAL COMPLETO
+
+dashboard_ulra
+
+Qué genera
+1) dashboard_index.html
+
+Con:
+
+resumen global por fase
+
+ranking
+
+riesgo
+
+comparativas
+
+2) dashboard_<fase>.html
+
+Con:
+
+duplicados por biblioteca
+
+interbibliotecas
+
+sospechosos
+
+mapa de calor
+
+gráficas Plotly
+
+Uso
+python3 dashboard_ulra.py generar
+
+3.7 analizar.py — MANUAL COMPLETO
+
+Utilidad general para:
+
+buscar clusters
+
+inspeccionar JSON
+
+obtener registros LIB:ID
+
+aplicar filtros rápidos
+
+Se usa como backend por otras herramientas.
+
+🧩 4. FLUJO DE TRABAJO RECOMENDADO
+PASO 1 — Preparar archivos (si son XML)
+python3 convertir_xml_a_mrc.py biblioteca.xml
+
+PASO 2 — Ejecutar el pipeline completo
+bash run_test_v5.sh
+
+
+Selecciona:
+
+A) Todos los modos
+
+PASO 3 — Analizar resultados globales
+python3 dashboard_ulra.py generar
+
+
+Abrir:
+
+dashboard_index.html
+
+PASO 4 — Analizar clusters sospechosos
+
+Ejemplo:
+
+python3 analizador_clusters_v2.py ... 
+
+PASO 5 — Revisión bibliotecas conflictivas
+
+duplicados internos
+
+interbibliotecas
+
+clusters > 25
+
+clustering fuerte demasiado estricto o demasiado permisivo
+
+📊 5. INTERPRETAR LOS RESULTADOS
+CSV (por fase)
+
+Columnas típicas:
+
+cluster_id
+
+size
+
+libraries (LIB1;LIB4…)
+
+weak_key
+
+strong_key
+
+fuzzy_similarity
+
+primary_lib
+
+primary_id
+
+JSON
+
+Para análisis avanzado:
+
+[
+  {
+    "cluster_id": 1,
+    "members": [
+      {"lib": "AGN", "local_id": "1234", ...},
+      {"lib": "UNPHU", "local_id": "5872", ...}
+    ]
+  }
+]
+
+HTML de dashboard
+
+Incluye:
+
+% de clusters tamaño 1
+
+% multi-biblioteca
+
+tamaño máximo
+
+riesgo (bajo, medio, alto)
+
+score del modelo
+
+🧠 6. DIAGNÓSTICO DE RAM
+
+Usa:
+
+logs/memory_peaks.log
+logs/summary_readable.log
+
+
+Revisa:
+
+picos de RAM por fase
+
+fases que más consumen durante fuzzy
+
+bucket sizes demasiado grandes → ajustar threshold
+
+🛠️ 7. ERRORES FRECUENTES
+Error	Causa	Solución
+UnicodeDecodeError	archivo corrupto	convertir a UTF-8
+MemoryError	usar XML	convertir a MRC
+clustering excesivo	threshold bajo	subir weak-threshold
+pocos clusters multi	threshold alto	bajar weak-threshold
+📝 8. EJEMPLOS DE USO LISTOS PARA COPIAR
+Pipeline completo
+bash run_test_v5.sh
+
+Dashboard
+python3 dashboard_ulra.py generar
+
+Cluster concreto
+python3 analizador_clusters_v2.py --cluster 123 --phase 03_fuzzy_standard
+
+🚀 9. ¿QUIERES EL DOCUMENTO EN PDF?
+
+Puedo generarlo ahora mismo con:
+
+portada
+
+índice automático
+
+estilo profesional
+
+tablas
+
+ejemplos
+
+incluso modo “manual corporate” para clientes
+
+Solo dime:
+
+📌 ¿Quieres el PDF ya?
+📌 ¿Formato español o catalán?
